@@ -37,25 +37,25 @@ def get_bot_response(query):
         .replace("knyk", "***"),
         best_similarity,
     )
-
-@app.route('/prompt', methods=['GET', 'POST'])
-def chat():
+@app.route('/', methods=['GET'])
+def index():
     if request.method == 'GET':
-        return 'Welcome to the chatbot! Use POST method to send queries.'
+            return 'Welcome to the chatbot! Use POST method to send queries.'
+    
+@app.route('/prompt', methods=['POST'])
+def chat():
+    if "prompt" in request.form and not request.form["prompt"] == "":
+        prompt = request.form["prompt"]
+    else:
+        return jsonify({"error": "prompt is missing."}), 400
 
-    elif request.method == 'POST':
-        if "prompt" in request.form and not request.form["prompt"] == "":
-            prompt = request.form["prompt"]
-        else:
-            return jsonify({"error": "prompt is missing."}), 400
+    response, similarity = get_bot_response(prompt)
 
-        response, similarity = get_bot_response(prompt)
-
-        return jsonify({
-            'user_query': prompt,
-            'bot_response': response,
-            'similarity': similarity,
-        })
+    return jsonify({
+        'user_query': prompt,
+        'bot_response': response,
+        'similarity': similarity,
+    })
 
 if __name__ == "__main__":
     app.run(debug=False, port=20060)
