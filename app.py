@@ -38,7 +38,7 @@ def get_bot_response(query):
         best_similarity,
     )
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/prompt', methods=['GET', 'POST'])
 def chat():
     if request.method == 'GET':
         return 'Welcome to the chatbot! Use POST method to send queries.'
