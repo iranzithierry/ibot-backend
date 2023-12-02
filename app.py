@@ -18,9 +18,9 @@ def get_bot_response(query):
 
     for idx, message in enumerate(chat_data):
         similarity = calculate_similarity(query, message["message"])
-        if similarity > 0.7 and idx < len(chat_data) - 1:
+        if similarity > 0.75 and idx < len(chat_data) - 1:
             next_message = chat_data[idx + 1]
-            if next_message["receiver"] == message["sender"]:
+            if message["sender"] == next_message["receiver"]:
                 matching_responses.append(next_message["message"])
                 best_similarity = similarity
 
@@ -29,14 +29,8 @@ def get_bot_response(query):
     else:
         bot_response = "Bot couldn't find a matching response."
 
-    return (
-        bot_response.replace("bsxr", "***")
-        .replace("gxr", "***")
-        .replace("gswer", "***")
-        .replace("gswr", "***")
-        .replace("knyk", "***"),
-        best_similarity,
-    )
+    return (bot_response, best_similarity)
+
 @app.route('/', methods=['GET'])
 def index():
     if request.method == 'GET':
