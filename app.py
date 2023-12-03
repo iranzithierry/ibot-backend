@@ -18,7 +18,7 @@ def get_bot_response(query):
 
     for idx, message in enumerate(chat_data):
         similarity = calculate_similarity(query, message["message"])
-        if similarity > 0.75 and idx < len(chat_data) - 1:
+        if similarity > 0.7 and idx < len(chat_data) - 1:
             next_message = chat_data[idx + 1]
             if message["sender"] == next_message["receiver"]:
                 matching_responses.append(next_message["message"])
