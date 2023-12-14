@@ -1,115 +1,136 @@
 import os
 import json
 from datetime import datetime
-
+from pathlib import Path
+import re
 import Levenshtein
+import asyncio
 
-instagram_data_dir = "messages/inbox/"
+INBOX_DIR = Path("../data_classified/inbox/")
 
 ALL_MESSAGES = []
-
+NEW_MESSAGES = []
 SENSITIVE_DATA = [
+    "Liked a message",
     "sent an attachment",
-    "shared a story",
+    "You sent an attachment.",
+    "liked a message" "shared a story",
     "changed the theme",
     "can now message and call",
     "missed a",
     "wasn't notified about this message",
-    "Liked a message",
     "You are now connected on Messenger",
     "missed your call",
     "You started a video chat",
     "Video chat ended",
-    "You set the quick reaction to"
+    "You set the quick reaction to",
 ]
 
 
-def calculate_similarity(one, two):
-    ratio = Levenshtein.ratio(str(one).lower(), str(two).lower())
-    return ratio
+class MakeJson:
+    def __init__(self, inbox_dir: Path):
+        """
+        Initializes the FileManager with the specified directories and paths.
+        """
+        self.inbox_dir = inbox_dir
+        self.inboxes_dir = os.listdir(inbox_dir)
+
+    def encode_bytes_to_string(self, text_bytes: str):
+        decodedString = text_bytes.encode("utf-8")
+        realString = str(decodedString).split("'")[1].split("\\")
+        normalStrings = ""
+        for stringText in realString:
+            if stringText.startswith("x"):
+                if len(stringText[3:]) > 1:
+                    normalStrings = normalStrings + " " + stringText[3:]
+            elif len(stringText) > 1:
+                normalStrings = normalStrings + " " + stringText
+        lastString = normalStrings.strip()
+        if len(lastString) == 0:
+            lastString = ""
+        return lastString
+
+    def get_sender(self, message):
+        sender = message.get("sender_name", "Unknown")
+        sender = self.encode_bytes_to_string(sender)
+        names = ["Thierry Bronx", "T.Roy"]
+        for name in names:
+            sender.replace(name, "Me")
+        return sender
 
 
-def encode_bytes_to_string(text_bytes: str):
-    decodedString = text_bytes.encode("utf-8")
-    realString = str(decodedString).split("'")[1].split("\\")
-    normalStrings = ""
-    for stringText in realString:
-        if stringText.startswith("x"):
-            if len(stringText[3:]) > 1:
-                normalStrings = normalStrings + " " + stringText[3:]
-        elif len(stringText) > 1:
-            normalStrings = normalStrings + " " + stringText
-    return normalStrings.strip()
+    def get_receiver(self, message, sender, participants):
+        receiver = participants[0] if sender == participants[1] else participants[1]
+        receiver = self.encode_bytes_to_string(receiver)
+        names = ["Thierry Bronx", "T.Roy"]
+        for name in names:
+            receiver.replace(name, "Me")
+        return receiver
+
+    def get_message(self, message: str, sender = ''):
+        for sensitive_message in SENSITIVE_DATA:
+            message = re.sub(rf"\b{re.escape(sensitive_message)}\b", "", message, flags=re.IGNORECASE)
+
+        message = message.replace(sender,"")
+        message = message.strip().replace(" .",".").replace("  ","")
+        return self.encode_bytes_to_string(message)
+                
+    async def extract_data_from_json(self, file_path: Path):
+        with open(file_path, "r") as file:
+            data = json.load(file)
+            participants = [participant["name"] for participant in data["participants"]]
+
+            que_messages = []
+            previous_message = None
+
+            for message in data["messages"]:
+                if len(participants) > 1:
+                    sender = self.get_sender(message)
+                    receiver = self.get_receiver(message, sender, participants)
+                    content = (
+                        message.get("content", "None")
+                        if "content" in message
+                        else "None"
+                    )
+                    timestamp_ms = message.get("timestamp_ms", 0)
+                    timestamp_ms = datetime.fromtimestamp(timestamp_ms / 1000.0)
+                    timestamp_ms = timestamp_ms.strftime("%Y-%m-%d %H:%M:%S")
+
+                    if  previous_message and previous_message["sender"] == sender:
+                        previous_message[
+                            "message"
+                        ] = f"{self.get_message(content, sender=sender)} \n {self.get_message(previous_message['message'], sender=sender)}"
+                    else:
+                        previous_message = {
+                            "sender": sender,
+                            "receiver": receiver,
+                            "message":  self.get_message(content, sender=sender),
+                            "timestamp_ms": timestamp_ms,
+                        }
+                        que_messages.append(previous_message)
+
+            messages = sorted(
+                que_messages, key=lambda x: x["timestamp_ms"], reverse=False
+            )
+            for message in messages:
+                ALL_MESSAGES.append(message)
+            return ALL_MESSAGES
+            
+
+    def main(self):
+        for dir_name in self.inboxes_dir:
+            dir_path = os.path.join(self.inbox_dir, dir_name)
+            inbox_json_path = os.path.join(dir_path, "message_1.json")
+            if os.path.exists(inbox_json_path):
+                asyncio.run(self.extract_data_from_json(inbox_json_path))
+
+        with open("data-test.json", "w") as outfile:
+            json.dump(ALL_MESSAGES, outfile, indent=4)
 
 
-def extract_data_from_json(file_path):
-    with open(file_path, "r") as file:
-        data = json.load(file)
-        participants = [participant["name"] for participant in data["participants"]]
-
-        sender_receiver_messages = []
-        current_message = None
-
-        for message in data["messages"]:
-            if len(participants) > 1:
-                sender = message.get("sender_name", "Unknown")
-                receiver = (
-                    participants[0] if sender == participants[1] else participants[1]
-                )
-                content = (
-                    message.get("content", "None") if "content" in message else "None"
-                )
-                timestamp_ms = message.get("timestamp_ms", 0)
-                timestamp_ms = datetime.fromtimestamp(timestamp_ms / 1000.0).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-
-                if current_message and current_message["sender"] == sender:
-                    current_message[
-                        "message"
-                    ] = f"{content}, {current_message['message']}"
-                else:
-                    current_message = {
-                        "sender": "Unknown"
-                        if sender == ""
-                        else sender.replace("Thierry Bronx", "Me").replace(
-                            "T.Roy", "Me"
-                        ),
-                        "receiver": "Unknown"
-                        if receiver == ""
-                        else receiver.replace("Thierry Bronx", "Me").replace(
-                            "T.Roy", "Me"
-                        ),
-                        "message": content,
-                        "timestamp_ms": timestamp_ms,
-                    }
-                    sender_receiver_messages.append(current_message)
-
-        sorted_messages = sorted(
-            sender_receiver_messages, key=lambda x: x["timestamp_ms"], reverse=False
-        )
-        for message in sorted_messages:
-            for category in ["receiver", "sender", "message"]:
-                string = encode_bytes_to_string(message[category])
-                if len(string) == 0:
-                    message.pop(category, "")
-            for sens_messages in SENSITIVE_DATA:
-                similarity = calculate_similarity(message["message"], sens_messages)
-                if similarity < 6:
-                    message.pop("timestamp_ms", None)
-                    ALL_MESSAGES.append(message)
-        return ALL_MESSAGES
-
-
-for folder_name in os.listdir(instagram_data_dir):
-    folder_path = os.path.join(instagram_data_dir, folder_name)
-    json_file_path = os.path.join(folder_path, "message_1.json")
-    if os.path.exists(json_file_path):
-        data = extract_data_from_json(json_file_path)
-    else:
-        data = {"data": "None"}
-
-with open("data.json", "w") as outfile:
-    json.dump(data, outfile, indent=4)
-
-print(f"Structured  messages saved to '{outfile.name}'")
+if __name__ == "__main__":
+    NOW = datetime.now().strftime("%H:%M:%S")
+    make_json = MakeJson(
+        INBOX_DIR,
+    )
+    make_json.main()
