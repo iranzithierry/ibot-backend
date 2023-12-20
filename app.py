@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-with open("data.json", "r", encoding="utf-8") as file:
+with open("data-beta.json", "r", encoding="utf-8") as file:
     chat_data = json.load(file)
 
 def calculate_similarity(query, message):
