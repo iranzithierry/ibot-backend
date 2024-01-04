@@ -72,7 +72,7 @@ class MakeJson:
             message = re.sub(rf"\b{re.escape(sensitive_message)}\b", "", message, flags=re.IGNORECASE)
 
         message = message.replace(sender,"")
-        message = message.strip().replace(" .",".").replace("  ","")
+        message = message.strip().replace(" .",".").replace("  ","").replace(' , ','')
         return self.encode_bytes_to_string(message)
                 
     async def extract_data_from_json(self, file_path: Path):
@@ -99,7 +99,7 @@ class MakeJson:
                     if  previous_message and previous_message["sender"] == sender:
                         previous_message[
                             "message"
-                        ] = f"{self.get_message(content, sender=sender)} \n {self.get_message(previous_message['message'], sender=sender)}"
+                        ] = f"{self.get_message(content, sender=sender)}, {self.get_message(previous_message['message'], sender=sender)}"
                     else:
                         previous_message = {
                             "sender": sender,
@@ -124,7 +124,7 @@ class MakeJson:
             if os.path.exists(inbox_json_path):
                 asyncio.run(self.extract_data_from_json(inbox_json_path))
 
-        with open("data-test.json", "w") as outfile:
+        with open("data-beta[,].json", "w") as outfile:
             json.dump(ALL_MESSAGES, outfile, indent=4)
 
 
